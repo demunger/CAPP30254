@@ -28,17 +28,24 @@ def summarize_data(array):
 def graph_data(array):
     array.hist(figsize = (15, 10))
 
-    ##return array.where((p.notnull(array)), None)
 
 def get_genders(array):
+    '''
     for index, row in array.iterrows():
-        if row["Gender"] == None:
-            request = requests.get("http://api.genderize.io?&name=" + row["First_name"])
-            print(json.loads(request.text))
-            temp = json.loads(request.text)["gender"].title()
-            print(temp)
-            row["Gender"] = temp
+        if p.isnull(row["Gender"]):
+            request = requests.get("http://api.genderize.io?name=" + row["First_name"])
+            row["Gender"] = json.loads(request.text)["gender"].title()
     return array
+    '''
+    for i in array.ix[p.isnull(array["Gender"])].index:
+        request = requests.get("http://api.genderize.io?name=" + array["First_name"][i])
+        array["Gender"][i] = json.loads(request.text)["gender"].title()
+
+    '''
+    name_list = [array["First_name"][index] for index, row in array.ix[p.isnull(array["Gender"])].iterrows()]
+    "&".join(["name[{}]={}".format(i, x) for i, x in enumerate(name_list)])
+    request = requests.get("http://api.genderize.io?" +
+    '''
 
 
 def fill_values_A(array):
@@ -50,13 +57,20 @@ def fill_values_A(array):
 
 
 def fill_values_B(array):
-    mean_yes = array.loc[array["Graduated"] == "Yes"].mean()
-    mean_no = array.loc[array["Graduated"] == "No"].mean()
+    mean_yes = array.ix[array["Graduated"] == "Yes"].mean()
+    mean_no = array.ix[array["Graduated"] == "No"].mean()
 
-    '''
-    array.loc[(array["Graduated"] == "Yes") & (p.isnull(array["Age"]))] = mean_yes["Age"]
-    array.loc[(array["Graduated"] == "No") & (p.isnull(array["Age"]))] = mean_no["Age"]
-    '''
+    array.ix[(array["Graduated"] == "Yes") & (p.isnull(array["Age"])), "Age"] = mean_yes["Age"]
+    array.ix[(array["Graduated"] == "No") & (p.isnull(array["Age"])), "Age"] = mean_no["Age"]
+
+    array.ix[(array["Graduated"] == "Yes") & (p.isnull(array["GPA"])), "GPA"] = mean_yes["GPA"]
+    array.ix[(array["Graduated"] == "No") & (p.isnull(array["GPA"])), "GPA"] = mean_no["GPA"]
+
+    array.ix[(array["Graduated"] == "Yes") & (p.isnull(array["Days_missed"])), "Days_missed"] = mean_yes["Days_missed"]
+    array.ix[(array["Graduated"] == "No") & (p.isnull(array["Days_missed"])), "Days_missed"] = mean_no["Days_missed"]
+    
+
+    '''    
     array_yes = array.loc[array["Graduated"] == "Yes"].fillna({"Age": mean_yes["Age"],
                           "GPA": mean_yes["GPA"],
                           "Days_missed": mean_yes["Days_missed"]})
@@ -65,18 +79,11 @@ def fill_values_B(array):
                           "GPA": mean_no["GPA"],
                           "Days_missed": mean_no["Days_missed"]})
 
-    array_B = array_yes.join(array_no, on = "index")
-
+    array_B = array_yes.merge(array_no, how = "outer")
     '''
-    array.loc[array["Graduated"] == "Yes"].fillna({"Age": mean_yes["Age"],
-                          "GPA": mean_yes["GPA"],
-                          "Days_missed": mean_yes["Days_missed"]})
 
-    array_B = array.fillna({"Age": mean["Age"],
-                          "GPA": mean["GPA"],
-                          "Days_missed": mean["Days_missed"]})
-    array_B.to_csv("mock_student_data_B.csv")
-    '''
+    array.to_csv("mock_student_data_B.csv")
+    
 
 if __name__ == '__main__':
     filename = "mock_student_data.csv"
