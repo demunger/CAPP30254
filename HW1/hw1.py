@@ -25,18 +25,20 @@ def read_data(filename):
 
     array.hist(figsize = (15, 10))
 
-    return array
+    return array.where((p.notnull(array)), None)
 
 def get_genders(array):
-	array = array.where((p.notnull(array)), None)
 	for index, row in array.iterrows():
 		if row["Gender"] == None:
 			request = requests.get("http://api.genderize.io?&name=" + row["First_name"])
-			row["Gender"] = json.loads(request.text)["gender"].title()
+			print(json.loads(request.text))
+			temp = json.loads(request.text)["gender"].title()
+			print(temp)
+			row["Gender"] = temp
 	return array
 
 
 if __name__ == '__main__':
     filename = "mock_student_data.csv"
     array = read_data(filename)
-    #get_genders(array)
+    get_genders(array)
