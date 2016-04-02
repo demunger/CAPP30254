@@ -1,11 +1,10 @@
-#import numpy as np
 import pandas as p
-##import matplotlib as plt
 import requests
 import json
 
+
 def read_data(filename):
-    return p.read_csv(filename, usecols = range(1, 9))
+    return p.read_csv(filename)
 
 
 def summarize_data(array):
@@ -30,66 +29,50 @@ def graph_data(array):
 
 
 def get_genders(array):
-    '''
-    for index, row in array.iterrows():
-        if p.isnull(row["Gender"]):
-            request = requests.get("http://api.genderize.io?name=" + row["First_name"])
-            row["Gender"] = json.loads(request.text)["gender"].title()
-    return array
-    '''
     for i in array.ix[p.isnull(array["Gender"])].index:
-        request = requests.get("http://api.genderize.io?name=" + array["First_name"][i])
-        array["Gender"][i] = json.loads(request.text)["gender"].title()
-
-    '''
-    name_list = [array["First_name"][index] for index, row in array.ix[p.isnull(array["Gender"])].iterrows()]
-    "&".join(["name[{}]={}".format(i, x) for i, x in enumerate(name_list)])
-    request = requests.get("http://api.genderize.io?" +
-    '''
+        #request = requests.get("http://api.genderize.io?name=" + array["First_name"][i])
+        array.loc[i, "Gender"] = "A" #json.loads(request.text)["gender"].title()
 
 
 def fill_values_A(array):
-    mean = array.mean()
-    array_A = array.fillna({"Age": mean["Age"],
-                          "GPA": mean["GPA"],
-                          "Days_missed": mean["Days_missed"]})
-    array_A.to_csv("mock_student_data_A.csv")
+    mean = array.mean().round(1)
+    array_A = fill_values(array, mean)
+    array_A.to_csv("mock_student_data_A.csv", index = False)
 
 
 def fill_values_B(array):
-    mean_yes = array.ix[array["Graduated"] == "Yes"].mean()
-    mean_no = array.ix[array["Graduated"] == "No"].mean()
+    grad = array.ix[array["Graduated"] == "Yes"]
+    non_grad = array.ix[array["Graduated"] == "No"]
 
-    array.ix[(array["Graduated"] == "Yes") & (p.isnull(array["Age"])), "Age"] = mean_yes["Age"]
-    array.ix[(array["Graduated"] == "No") & (p.isnull(array["Age"])), "Age"] = mean_no["Age"]
+    mean_grad = grad.mean().round(1)
+    mean_non_grad = non_grad.mean().round(1)
 
-    array.ix[(array["Graduated"] == "Yes") & (p.isnull(array["GPA"])), "GPA"] = mean_yes["GPA"]
-    array.ix[(array["Graduated"] == "No") & (p.isnull(array["GPA"])), "GPA"] = mean_no["GPA"]
-
-    array.ix[(array["Graduated"] == "Yes") & (p.isnull(array["Days_missed"])), "Days_missed"] = mean_yes["Days_missed"]
-    array.ix[(array["Graduated"] == "No") & (p.isnull(array["Days_missed"])), "Days_missed"] = mean_no["Days_missed"]
+    array_B = p.concat([fill_values(grad, mean_grad), fill_values(non_grad, mean_non_grad)]).sort_index(by = "ID")
+    
+    array_B.to_csv("mock_student_data_B.csv", index = False)
     
 
-    '''    
-    array_yes = array.loc[array["Graduated"] == "Yes"].fillna({"Age": mean_yes["Age"],
-                          "GPA": mean_yes["GPA"],
-                          "Days_missed": mean_yes["Days_missed"]})
+def fill_values(array, values):
+    return array.fillna({"Age": values["Age"],
+                         "GPA": values["GPA"],
+                         "Days_missed": values["Days_missed"]})
 
-    array_no = array.loc[array["Graduated"] == "No"].fillna({"Age": mean_no["Age"],
-                          "GPA": mean_no["GPA"],
-                          "Days_missed": mean_no["Days_missed"]})
-
-    array_B = array_yes.merge(array_no, how = "outer")
-    '''
-
-    array.to_csv("mock_student_data_B.csv")
-    
 
 if __name__ == '__main__':
+    '''
+    ## Load student record file
     filename = "mock_student_data.csv"
     array = read_data(filename)
     
-    summarize_data(array)
-    graph_data(array)
+    ## Generate summary statistics
+    sum_array = array.ix[:, 1:] # Ommit ID column
+    summarize_data(sum_array)
+    graph_data(sum_array)
     
+    ## Infer missing genders
     get_genders(array)
+
+    ## Infer missing data using mean, class-conditional mean values
+    fill_values_A(array)
+    fill_values_B(array)
+    '''
