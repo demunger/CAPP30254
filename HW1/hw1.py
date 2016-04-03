@@ -30,8 +30,8 @@ def graph_data(array):
 
 def get_genders(array):
     for i in array.ix[p.isnull(array["Gender"])].index:
-        #request = requests.get("http://api.genderize.io?name=" + array["First_name"][i])
-        array.loc[i, "Gender"] = "A" #json.loads(request.text)["gender"].title()
+        request = requests.get("http://api.genderize.io?name=" + array["First_name"][i])
+        array.loc[i, "Gender"] = json.loads(request.text)["gender"].title()
 
 
 def fill_values_A(array):
@@ -59,7 +59,6 @@ def fill_values(array, values):
 
 
 if __name__ == '__main__':
-    '''
     ## Load student record file
     filename = "mock_student_data.csv"
     array = read_data(filename)
@@ -75,4 +74,3 @@ if __name__ == '__main__':
     ## Infer missing data using mean, class-conditional mean values
     fill_values_A(array)
     fill_values_B(array)
-    '''
