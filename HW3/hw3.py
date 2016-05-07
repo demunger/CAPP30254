@@ -101,6 +101,7 @@ def log_values(df, columns):
     ## Take the log value in field column
     df[columns] = df[columns].apply(lambda x: np.log(x + 1))
 
+
 def split_data(df, dependent_column = 0, testing_split = .2):
     ## Separate dependent, independent variable
     y = training_data[training_data.columns[dependent_column]]
@@ -108,8 +109,8 @@ def split_data(df, dependent_column = 0, testing_split = .2):
     ## Create 80/20 train/test split
     return train_test_split(X, y, test_size = 0.2, random_state = 0)
 
-def magic_loop(models_framework, grid_framework, built_models, X_train, X_test, y_train, y_test):
 
+def magic_loop(models_framework, grid_framework, built_models, X_train, X_test, y_train, y_test):
     for index, clf in models_framework.items():
         parameters = grid_framework[index]
         
@@ -201,14 +202,14 @@ if __name__ == "__main__":
     else:
         print("Usage: {} <training_data.csv> <scoring_data.csv> <dependent variable column #>".format(sys.argv[0]))
         sys.exit(0)
-    
+
     ## Read data
     training_data = read_data(training_filename)
-    ''''
+
     ## Explore data
     summarize_data(training_data)
     graph_data(training_data)
-    '''
+
     ## Remove outliers
     training_data = training_data[training_data["age"] > 0]
 
@@ -228,25 +229,25 @@ if __name__ == "__main__":
                         "Random Forest": RandomForestClassifier(),
                         "Boosting": GradientBoostingClassifier(),
                         "K-NN Bagging": BaggingClassifier(KNeighborsClassifier())}
-    
+
     grid_framework = {"Logit": {"penalty": ["l1", "l2"], 
-                               "C": [0.00001, 0.0001, 0.001, 0.01, 0.1, 1, 10]},
-                      "K-NN": {"n_neighbors": [1, 5, 10, 25, 50, 100],
+                               "C": [0.01, 0.1, 1, 10]},
+                      "K-NN": {"n_neighbors": [1, 5, 10],
                                "weights": ["uniform", "distance"],
                                "algorithm": ["auto", "ball_tree", "kd_tree"]},
                       "Decision Tree": {"criterion": ["gini", "entropy"], 
-                               "max_depth": [1, 5, 10], 
+                               "max_depth": [1, 5], 
                                "max_features": ["sqrt", "log2"],
-                               "min_samples_split": [2, 5, 10]},
-                      "SVM": {"C": [0.00001, 0.0001, 0.001, 0.01, 0.1, 1, 10]},
-                      "Random Forest": {"n_estimators": [1, 10, 100], 
-                               "max_depth": [1, 5, 10], 
+                               "min_samples_split": [2, 10]},
+                      "SVM": {"C": [0.01, 0.1, 1]},
+                      "Random Forest": {"n_estimators": [1, 10, 50], 
+                               "max_depth": [1, 5], 
                                "max_features": ["sqrt", "log2"],
-                               "min_samples_split": [2, 5, 10]},
-                      "Boosting": {"n_estimators": [1, 10, 100], 
-                               "learning_rate": [0.001, 0.01, 0.05, 0.1, 0.5],
+                               "min_samples_split": [2, 10]},
+                      "Boosting": {"n_estimators": [1, 10], 
+                               "learning_rate": [0.001, 0.01, 0.1],
                                "subsample": [0.1, 0.5, 1.0], 
-                               "max_depth": [1, 3, 5, 10]},
+                               "max_depth": [1, 5]},
                       "K-NN Bagging": {"max_samples": [0.1, 0.5, 1.0],
                                "max_features": [0.1, 0.5, 1.0]}}
 
@@ -255,22 +256,17 @@ if __name__ == "__main__":
     built_models = {model: dict.fromkeys(model_attributes + model_metrics) for model in list(models_framework.keys())}
 
     magic_loop(models_framework, grid_framework, built_models, *split_data(training_data))
-    
-    ''''
-    ## Evaluate classifier
-    accuracy = [test_accuracy(model, y, X) for model in built_models]
-    print("Accuracy on training data for:")
-    for i, percent in enumerate(accuracy):
-        print("\t{:<15} {:.1%}".format(list(models_framework.keys())[i], percent))
 
     ## Score new data
     scoring_data = read_data(scoring_filename)
     ## Pre-process scoring data
     scoring_data = scoring_data.drop(scoring_data.columns[dependent_column], axis = 1)
     scoring_data.fillna(value_dict, inplace = True)
-
-    ## Select highest performing model
-    model = built_models[accuracy.index(max(accuracy))]
-    prediction = predict_model(model, scoring_data) 
+    ## Find max AUC
+    max_auc = 0
+    for model in built_models.keys():
+        if(max_auc < built_models[model]["AUC"]):
+            max_auc = built_models[model]["AUC"]
+            new_model = built_models[model]["best_model"]
+    prediction = predict_model(new_model, scoring_data) 
     np.savetxt("predicted_values.csv", prediction)
-    '''
