@@ -1,10 +1,18 @@
 import sys
-import pandas as pd
+import time
 import numpy as np
+import pandas as pd
 import matplotlib.pyplot as plt
+from sklearn.cross_validation import train_test_split
+from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier, BaggingClassifier
+from sklearn.grid_search import ParameterGrid
+from sklearn.grid_search import GridSearchCV
 from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import *
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.svm import LinearSVC
+from sklearn.tree import DecisionTreeClassifier
+
 
 def read_data(filename):
     df = pd.read_csv(filename)
@@ -93,38 +101,97 @@ def log_values(df, columns):
     ## Take the log value in field column
     df[columns] = df[columns].apply(lambda x: np.log(x + 1))
 
-'''
-def logistic_regression(y, X):
-    model = LogisticRegression()
-    model.fit(X, y)
-    return model
+def split_data(df, dependent_column = 0, testing_split = .2):
+    ## Separate dependent, independent variable
+    y = training_data[training_data.columns[dependent_column]]
+    X = training_data.drop(training_data.columns[dependent_column], axis = 1)
+    ## Create 80/20 train/test split
+    return train_test_split(X, y, test_size = 0.2, random_state = 0)
+
+def magic_loop(models_framework, grid_framework, built_models, X_train, X_test, y_train, y_test):
+
+    for index, clf in models_framework.items():
+        parameters = grid_framework[index]
+        
+        ## Measure time to fit classifier based on parameters
+        start_time = time.time()
+
+        grid = GridSearchCV(estimator = clf, param_grid = parameters, verbose = 10)
+        grid.fit(X_train, y_train)
+
+        ## Store model attributes
+        built_models[index]["time"] = time.time() - start_time
+        built_models[index]["best_model"] = grid.best_estimator_ 
+        built_models[index]["best_params"] = grid.best_params_
+        built_models[index]["best_score"] = grid.best_score_
+        
+        y_predict = built_models[index]["best_model"].predict(X_test)
+        ## Store model metrics
+        built_models[index]["accuracy"] = accuracy_score(y_test, y_predict)
+        built_models[index]["precision"] = precision_score(y_test, y_predict)
+        built_models[index]["recall"] = recall_score(y_test, y_predict)
+        built_models[index]["F1"] = f1_score(y_test, y_predict)
+        built_models[index]["AUC"] = roc_auc_score(y_test, y_predict)
+
+        if hasattr(clf, "predict_proba"):
+            y_prob = built_models[index]["best_model"].predict_proba(X_test)[:,1]
+        else:
+            y_prob = built_models[index]["best_model"].decision_function(X_test)
+
+        plot_precision_recall(y_test, y_prob, index)
 
 
-def k_nearest_neighbor(y, X):
-    model = KNeighborsClassifier()
-    model.fit(X, y)
-    return model
+def plot_precision_recall(y_test, y_prob, index):
+    precision_curve, recall_curve, pr_thresholds = precision_recall_curve(y_test, y_prob)
+
+    precision_curve = precision_curve[:-1]
+    recall_curve = recall_curve[:-1]
+
+    plot_precision_and_recall(index, y_test, y_prob, recall_curve, precision_curve, pr_thresholds)
+    plot_precision_v_recall(index, y_test, y_prob, recall_curve, precision_curve)
 
 
-def linear_svm(y, X):
-    model = LinearSVC()
-    model.fit(X, y)
-    return model
-'''
+def plot_precision_and_recall(index, y_test, y_prob, recall_curve, precision_curve, pr_thresholds):
+    num = len(y_prob)
+    pct_above_per_thresh = []
+    for value in pr_thresholds:
+        num_above_thresh = len(y_prob[y_prob >= value])
+        pct_above_thresh = num_above_thresh / float(num)
+        pct_above_per_thresh.append(pct_above_thresh)
+    pct_above_per_thresh = np.array(pct_above_per_thresh)
+    
+    plt.clf()
+    fig, ax1 = plt.subplots()
+    ax1.plot(pct_above_per_thresh, precision_curve, "blue")
+    ax1.set_xlabel("Percent of Population")
+    ax1.set_ylabel("Precision", color = "blue")
+    
+    ax2 = ax1.twinx()
+    ax2.plot(pct_above_per_thresh, recall_curve, "red")
+    ax2.set_ylabel("Recall", color = "red")
+    plt.title(index)
+    plt.show()
 
-def test_accuracy(model, y, X):
-    return model.score(X, y)
+
+def plot_precision_v_recall(index, y_test, y_prob, recall_curve, precision_curve):
+    avg_precision = average_precision_score(y_test, y_prob)
+    
+    plt.clf()
+    plt.plot(recall_curve, precision_curve, label = "area = {:0.2}".format(avg_precision))
+    plt.legend(loc = "lower right")
+    plt.ylabel('Precision')
+    plt.xlabel('Recall')
+    plt.title(index)
+    plt.xlim([0.0, 1.1])
+    plt.ylim([0.0, 1.1])
+    plt.show()
 
 
-def predict_model(model, df):
-    return model.predict(df)
-
-
-if __name__ == '__main__':
+if __name__ == "__main__":
     num_args = len(sys.argv)
 
     if num_args == 1:
-        training_filename = "cs-training-short.csv"
+        training_filename = "cs-training.csv"
         scoring_filename = "cs-test.csv"
         dependent_column = 0
     elif num_args == 4:
@@ -137,11 +204,14 @@ if __name__ == '__main__':
     
     ## Read data
     training_data = read_data(training_filename)
-    '''
+    ''''
     ## Explore data
     summarize_data(training_data)
     graph_data(training_data)
     '''
+    ## Remove outliers
+    training_data = training_data[training_data["age"] > 0]
+
     ## Pre-process data
     value_dict = impute_values(training_data)
 
@@ -151,21 +221,47 @@ if __name__ == '__main__':
     standardize_values(training_data, ["age", "NumberOfTime30-59DaysPastDueNotWorse", "MonthlyIncome", "NumberOfOpenCreditLinesAndLoans", "NumberOfTimes90DaysLate", "NumberRealEstateLoansOrLines", "NumberOfTime60-89DaysPastDueNotWorse", "NumberOfDependents"])
 
     ## Build classifier
-    models_framework = [("Logit", LogisticRegression()), ("K-NN", KNeighborsClassifier()), ("SVM", LinearSVC())]
+    models_framework = {"Logit": LogisticRegression(),
+                        "K-NN": KNeighborsClassifier(),
+                        "Decision Tree": DecisionTreeClassifier(),
+                        "SVM": LinearSVC(),
+                        "Random Forest": RandomForestClassifier(),
+                        "Boosting": GradientBoostingClassifier(),
+                        "K-NN Bagging": BaggingClassifier(KNeighborsClassifier())}
     
-    ## Separate dependent, independent variable
-    y = training_data[training_data.columns[dependent_column]]
-    X = training_data.drop(training_data.columns[dependent_column], axis = 1)
-    built_models = []
-    for clf in models_framework
-    model[1].fit(y, X) for model in models_framework]
+    grid_framework = {"Logit": {"penalty": ["l1", "l2"], 
+                               "C": [0.00001, 0.0001, 0.001, 0.01, 0.1, 1, 10]},
+                      "K-NN": {"n_neighbors": [1, 5, 10, 25, 50, 100],
+                               "weights": ["uniform", "distance"],
+                               "algorithm": ["auto", "ball_tree", "kd_tree"]},
+                      "Decision Tree": {"criterion": ["gini", "entropy"], 
+                               "max_depth": [1, 5, 10], 
+                               "max_features": ["sqrt", "log2"],
+                               "min_samples_split": [2, 5, 10]},
+                      "SVM": {"C": [0.00001, 0.0001, 0.001, 0.01, 0.1, 1, 10]},
+                      "Random Forest": {"n_estimators": [1, 10, 100], 
+                               "max_depth": [1, 5, 10], 
+                               "max_features": ["sqrt", "log2"],
+                               "min_samples_split": [2, 5, 10]},
+                      "Boosting": {"n_estimators": [1, 10, 100], 
+                               "learning_rate": [0.001, 0.01, 0.05, 0.1, 0.5],
+                               "subsample": [0.1, 0.5, 1.0], 
+                               "max_depth": [1, 3, 5, 10]},
+                      "K-NN Bagging": {"max_samples": [0.1, 0.5, 1.0],
+                               "max_features": [0.1, 0.5, 1.0]}}
 
+    model_attributes = ["best_params", "best_score", "best_model", "time"]
+    model_metrics = ["accuracy", "precision", "recall", "F1", "AUC"]
+    built_models = {model: dict.fromkeys(model_attributes + model_metrics) for model in list(models_framework.keys())}
 
+    magic_loop(models_framework, grid_framework, built_models, *split_data(training_data))
+    
+    ''''
     ## Evaluate classifier
     accuracy = [test_accuracy(model, y, X) for model in built_models]
     print("Accuracy on training data for:")
     for i, percent in enumerate(accuracy):
-        print("\t{}: \t{:.1%}".format(models_framework[i][0], percent))
+        print("\t{:<15} {:.1%}".format(list(models_framework.keys())[i], percent))
 
     ## Score new data
     scoring_data = read_data(scoring_filename)
@@ -177,3 +273,4 @@ if __name__ == '__main__':
     model = built_models[accuracy.index(max(accuracy))]
     prediction = predict_model(model, scoring_data) 
     np.savetxt("predicted_values.csv", prediction)
+    '''
